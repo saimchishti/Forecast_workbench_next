@@ -4,6 +4,8 @@ import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { isApiError, safeFetch } from "@/lib/apiClient";
+
 type AggregationSummary = {
   daily_rows: number;
   weekly_rows: number;
@@ -11,8 +13,6 @@ type AggregationSummary = {
   output_files?: Record<string, string>;
   status?: string;
 };
-
-const AGGREGATE_ENDPOINT = "http://127.0.0.1:8000/api/aggregate_data";
 
 export default function AggregationStage() {
   const [summary, setSummary] = useState<AggregationSummary | null>(null);
@@ -26,13 +26,13 @@ export default function AggregationStage() {
       try {
         setError(null);
         setLoading(true);
-        const response = await fetch(AGGREGATE_ENDPOINT, {
-          method: "POST",
-          signal: controller.signal,
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload?.detail ?? payload?.message ?? "Backend connection failed");
+        const payload = await safeFetch<{ status: string; summary: AggregationSummary }>(
+          "/api/aggregate_data",
+          { method: "POST", signal: controller.signal },
+        );
+        if (isApiError(payload)) {
+          setError(payload.error);
+          return;
         }
         setSummary((payload.summary as AggregationSummary) ?? payload);
       } catch (err) {

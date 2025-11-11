@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
+import { isApiError, safeFetch } from "@/lib/apiClient";
 import Review from "./Review";
 import RolesBanner from "./Roles";
 import StepA from "./StepA";
@@ -48,8 +49,6 @@ const helpItems = [
   { title: "Special events", body: "Upload a validated events calendar so uplift assumptions stay in sync." },
   { title: "Restaurant structure", body: "Restaurant > City > Country is the minimum to unlock roll-ups." },
 ];
-
-const API_BASE = "http://127.0.0.1:8000/api";
 
 export default function SetupWizardPage() {
   const [currentStep, setCurrentStep] = useState(0);
@@ -213,18 +212,16 @@ export default function SetupWizardPage() {
     try {
       const body = new FormData();
       body.append("file", file);
-      const response = await fetch(
-        `${API_BASE}/upload_promo_calendar?env=${environment}&role=${role}`,
+      const payload = await safeFetch<PromoPreview>(
+        `/api/upload_promo_calendar?env=${environment}&role=${role}`,
         {
           method: "POST",
           body,
         },
       );
-      if (!response.ok) {
-        const detail = await readError(response);
-        throw new Error(detail ?? "Unable to upload events calendar");
+      if (isApiError(payload)) {
+        throw new Error(payload.error);
       }
-      const payload: PromoPreview = await response.json();
       setPromoPreview(payload);
       const normalizedPath = payload.path.replace(/^backend[\\/]/i, "").replace(/\\/g, "/");
       handleForecastChange("promo_calendar_path", normalizedPath || payload.path);
@@ -239,19 +236,16 @@ export default function SetupWizardPage() {
     setIsSaving(true);
     setSubmitError(null);
     try {
-      const response = await fetch(
-        `${API_BASE}/save_config?env=${environment}&role=${role}`,
-        {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(formData),
-        },
-      );
-      if (!response.ok) {
-        const detail = await readError(response);
-        throw new Error(detail ?? "Unable to save configuration");
+      const payload = await safeFetch<{
+        warnings?: string[];
+        config?: { meta?: { created_at?: string; created_by?: string }; forecast?: Record<string, unknown> };
+      }>(`/api/save_config?env=${environment}&role=${role}`, {
+        method: "POST",
+        body: JSON.stringify(formData),
+      });
+      if (isApiError(payload)) {
+        throw new Error(payload.error);
       }
-      const payload = await response.json();
       setWarnings(payload.warnings ?? []);
       setSavedSnapshot(formData);
       const createdAt = payload.config?.meta?.created_at ?? new Date().toISOString();
@@ -274,17 +268,16 @@ export default function SetupWizardPage() {
     setIsDownloading(true);
     setSubmitError(null);
     try {
-      const url = new URL(`${API_BASE}/download_config`);
-      url.searchParams.set("env", environment);
+      const params = new URLSearchParams({ env: environment });
       if (lastSavedMeta?.path) {
-        url.searchParams.set("path", lastSavedMeta.path);
+        params.set("path", lastSavedMeta.path);
       }
-      const response = await fetch(url);
-      if (!response.ok) {
-        const detail = await readError(response);
-        throw new Error(detail ?? "Nothing to download yet");
+      const payload = await safeFetch<{ yaml: string; path?: string }>(
+        `/api/download_config?${params.toString()}`,
+      );
+      if (isApiError(payload)) {
+        throw new Error(payload.error);
       }
-      const payload = await response.json();
       const blob = new Blob([payload.yaml], { type: "text/yaml" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
@@ -302,15 +295,13 @@ export default function SetupWizardPage() {
     setSelectedTemplatePath(path);
     if (!path) return;
     try {
-      const url = new URL(`${API_BASE}/download_config`);
-      url.searchParams.set("env", environment);
-      url.searchParams.set("path", path);
-      const response = await fetch(url);
-      if (!response.ok) {
-        const detail = await readError(response);
-        throw new Error(detail ?? "Unable to load template");
+      const params = new URLSearchParams({ env: environment, path });
+      const payload = await safeFetch<{ config?: ForecastConfigForm }>(
+        `/api/download_config?${params.toString()}`,
+      );
+      if (isApiError(payload)) {
+        throw new Error(payload.error);
       }
-      const payload = await response.json();
       if (payload.config) {
         setFormData((prev) => ({
           ...prev,
@@ -350,19 +341,18 @@ export default function SetupWizardPage() {
 
   const fetchDefaults = async () => {
     try {
-      const response = await fetch(`${API_BASE}/defaults`);
-      if (!response.ok) return;
-      const defaults = await response.json();
+      const defaults = await safeFetch<Record<string, string | number>>("/api/defaults");
+      if (isApiError(defaults)) return;
       setFormData((prev) => ({
         ...prev,
-        config_version: defaults.config_version ?? prev.config_version,
+        config_version: (defaults.config_version as string) ?? prev.config_version,
         forecast: {
           ...prev.forecast,
-          horizon_days: defaults.forecast_horizon_days ?? prev.forecast.horizon_days,
-          lead_time_days: defaults.lead_time_days ?? prev.forecast.lead_time_days,
-          granularity: defaults.granularity ?? prev.forecast.granularity,
-          hierarchy: defaults.hierarchy ?? prev.forecast.hierarchy,
-          country: defaults.country ?? prev.forecast.country,
+          horizon_days: (defaults.forecast_horizon_days as number) ?? prev.forecast.horizon_days,
+          lead_time_days: (defaults.lead_time_days as number) ?? prev.forecast.lead_time_days,
+          granularity: (defaults.granularity as ForecastConfigForm["forecast"]["granularity"]) ?? prev.forecast.granularity,
+          hierarchy: (defaults.hierarchy as string) ?? prev.forecast.hierarchy,
+          country: (defaults.country as string) ?? prev.forecast.country,
         },
       }));
     } catch (error) {
@@ -372,9 +362,10 @@ export default function SetupWizardPage() {
 
   const fetchHistory = useCallback(async () => {
     try {
-      const response = await fetch(`${API_BASE}/get_versions?env=${environment}`);
-      if (!response.ok) return;
-      const payload = await response.json();
+      const payload = await safeFetch<{ history?: HistoryEntry[] }>(
+        `/api/get_versions?env=${environment}`,
+      );
+      if (isApiError(payload)) return;
       setHistory(payload.history ?? []);
     } catch (error) {
       console.warn("Unable to load history", error);
@@ -383,9 +374,8 @@ export default function SetupWizardPage() {
 
   const fetchHierarchy = async () => {
     try {
-      const response = await fetch(`${API_BASE}/hierarchy_mapping`);
-      if (!response.ok) return;
-      const payload = await response.json();
+      const payload = await safeFetch<HierarchyMapping>("/api/hierarchy_mapping");
+      if (isApiError(payload)) return;
       setHierarchyMapping(payload);
     } catch (error) {
       console.warn("Unable to load hierarchy mapping", error);
@@ -394,14 +384,12 @@ export default function SetupWizardPage() {
 
   const handleMappingSave = async (mapping: HierarchyMapping) => {
     try {
-      const response = await fetch(`${API_BASE}/hierarchy_mapping?role=${role}`, {
+      const payload = await safeFetch<{ status: string }>(`/api/hierarchy_mapping?role=${role}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(mapping),
       });
-      if (!response.ok) {
-        const detail = await readError(response);
-        throw new Error(detail ?? "Unable to save mapping");
+      if (isApiError(payload)) {
+        throw new Error(payload.error);
       }
       setHierarchyMapping(mapping);
     } catch (error) {
@@ -411,9 +399,8 @@ export default function SetupWizardPage() {
 
   const handleRollupTest = async () => {
     try {
-      const response = await fetch(`${API_BASE}/test_rollup`, {
+      const payload = await safeFetch<RollupPreview>("/api/test_rollup", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           restaurant_values: {
             "Restaurant A": 120,
@@ -422,11 +409,9 @@ export default function SetupWizardPage() {
           },
         }),
       });
-      if (!response.ok) {
-        const detail = await readError(response);
-        throw new Error(detail ?? "Unable to test roll-up");
+      if (isApiError(payload)) {
+        throw new Error(payload.error);
       }
-      const payload = await response.json();
       setRollupPreview(payload);
       return payload;
     } catch (error) {
@@ -677,18 +662,6 @@ export default function SetupWizardPage() {
   );
 }
 
-async function readError(response: Response) {
-  try {
-    const body = await response.json();
-    if (typeof body.detail === "string") return body.detail;
-    if (Array.isArray(body.detail)) {
-      return body.detail.join("; ");
-    }
-    return undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 
 

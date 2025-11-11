@@ -3,6 +3,8 @@
 import { useRouter } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 
+import { apiBaseUrl, isApiError, safeFetch } from "@/lib/apiClient";
+
 type ValidationSummary = {
   rows_before: number;
   rows_after: number;
@@ -12,8 +14,7 @@ type ValidationSummary = {
   validated_file: string;
 };
 
-const VALIDATION_ENDPOINT = "http://127.0.0.1:8000/api/validate_data";
-const DOWNLOAD_URL = "http://127.0.0.1:8000/data/validated/validated_raw_data.csv";
+const DOWNLOAD_URL = `${apiBaseUrl}/data/validated/validated_raw_data.csv`;
 
 export default function ValidatePage() {
   const [summary, setSummary] = useState<ValidationSummary | null>(null);
@@ -27,29 +28,13 @@ export default function ValidatePage() {
       try {
         setLoading(true);
         setError(null);
-        const response = await fetch(VALIDATION_ENDPOINT, {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          signal: controller.signal,
-        });
-
-        if (!response.ok) {
-          let detail = "Validation failed. Please check the backend logs.";
-          try {
-            const payload = await response.json();
-            detail =
-              payload?.detail ??
-              payload?.message ??
-              (typeof payload === "string" ? payload : detail);
-          } catch {
-            // ignore parse errors
-          }
-          throw new Error(detail);
+        const payload = await safeFetch<{ status: string; summary: ValidationSummary }>(
+          "/api/validate_data",
+          { method: "POST", signal: controller.signal },
+        );
+        if (isApiError(payload)) {
+          throw new Error(payload.error);
         }
-
-        const payload = await response.json();
         setSummary(payload.summary);
       } catch (err) {
         if ((err as Error).name === "AbortError") return;

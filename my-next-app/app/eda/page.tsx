@@ -3,13 +3,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { motion } from "framer-motion";
 
+import { isApiError, safeFetch } from "@/lib/apiClient";
 import MetricCard from "./components/MetricCard";
 import TimeseriesChart from "./components/TimeseriesChart";
 import DistributionChart from "./components/DistributionChart";
 import CorrelationHeatmap from "./components/CorrelationHeatmap";
 import DataTable from "./components/DataTable";
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_BACKEND_URL ?? "http://127.0.0.1:8000";
 
 type SummaryResponse = {
   basic: Record<string, Stats>;
@@ -64,15 +63,6 @@ const GRANULARITY_OPTIONS = [
   { label: "Monthly", value: "monthly" },
 ];
 
-const fetchJson = async <T,>(path: string, signal: AbortSignal) => {
-  const response = await fetch(`${API_BASE_URL}${path}`, { signal });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) {
-    throw new Error(payload?.detail ?? payload?.message ?? "Unable to fetch EDA insights");
-  }
-  return payload as T;
-};
-
 export default function EdaDashboard() {
   const [granularity, setGranularity] = useState("daily");
   const [distributionColumn, setDistributionColumn] = useState("sales_qty");
@@ -102,28 +92,51 @@ export default function EdaDashboard() {
       try {
         setLoading(true);
         setError(null);
-        const [dataHeadPayload, summaryPayload, timeseriesPayload, corrPayload, distPayload] = await Promise.all([
-          fetchJson<{ status: string; data_head: DataRow[] }>(
-            `/api/eda/datahead?granularity=${granularity}&limit=10`,
-            controller.signal,
-          ),
-          fetchJson<{ status: string; summary: SummaryResponse }>(
-            `/api/eda/summary?granularity=${granularity}`,
-            controller.signal,
-          ),
-          fetchJson<{ status: string; timeseries: TimeseriesPoint[] }>(
-            `/api/eda/timeseries?granularity=${granularity}`,
-            controller.signal,
-          ),
-          fetchJson<{ status: string; correlation: CorrelationMatrix }>(
-            `/api/eda/correlation?granularity=${granularity}`,
-            controller.signal,
-          ),
-          fetchJson<{ status: string; distribution: Histogram }>(
-            `/api/eda/distribution?column=${encodeURIComponent(distributionColumn)}&granularity=${granularity}`,
-            controller.signal,
-          ),
-        ]);
+        const dataHeadPayload = await safeFetch<{ status: string; data_head: DataRow[] }>(
+          `/api/eda/datahead?granularity=${granularity}&limit=10`,
+          { signal: controller.signal },
+        );
+        if (isApiError(dataHeadPayload)) {
+          setError(dataHeadPayload.error);
+          return;
+        }
+
+        const summaryPayload = await safeFetch<{ status: string; summary: SummaryResponse }>(
+          `/api/eda/summary?granularity=${granularity}`,
+          { signal: controller.signal },
+        );
+        if (isApiError(summaryPayload)) {
+          setError(summaryPayload.error);
+          return;
+        }
+
+        const timeseriesPayload = await safeFetch<{ status: string; timeseries: TimeseriesPoint[] }>(
+          `/api/eda/timeseries?granularity=${granularity}`,
+          { signal: controller.signal },
+        );
+        if (isApiError(timeseriesPayload)) {
+          setError(timeseriesPayload.error);
+          return;
+        }
+
+        const corrPayload = await safeFetch<{ status: string; correlation: CorrelationMatrix }>(
+          `/api/eda/correlation?granularity=${granularity}`,
+          { signal: controller.signal },
+        );
+        if (isApiError(corrPayload)) {
+          setError(corrPayload.error);
+          return;
+        }
+
+        const distPayload = await safeFetch<{ status: string; distribution: Histogram }>(
+          `/api/eda/distribution?column=${encodeURIComponent(distributionColumn)}&granularity=${granularity}`,
+          { signal: controller.signal },
+        );
+        if (isApiError(distPayload)) {
+          setError(distPayload.error);
+          return;
+        }
+
         setDataHead(dataHeadPayload.data_head ?? []);
         setSummary(summaryPayload.summary);
         setTimeseries(timeseriesPayload.timeseries);
@@ -133,7 +146,7 @@ export default function EdaDashboard() {
       } catch (err) {
         if ((err as Error).name === "AbortError") return;
         console.error("EDA fetch failed", err);
-        setError("Dataset not found — please validate data first.");
+        setError("Dataset not found -- please validate data first.");
       } finally {
         setLoading(false);
       }

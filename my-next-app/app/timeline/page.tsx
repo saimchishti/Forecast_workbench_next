@@ -4,13 +4,13 @@ import { motion } from "framer-motion";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { isApiError, safeFetch } from "@/lib/apiClient";
+
 type TimelineSummary = {
   missing_dates_filled: number;
   output_file: string;
   status?: string;
 };
-
-const TIMELINE_ENDPOINT = "http://127.0.0.1:8000/api/build_timeline";
 
 export default function TimelineBuilder() {
   const [summary, setSummary] = useState<TimelineSummary | null>(null);
@@ -24,13 +24,13 @@ export default function TimelineBuilder() {
       try {
         setError(null);
         setLoading(true);
-        const response = await fetch(TIMELINE_ENDPOINT, {
-          method: "POST",
-          signal: controller.signal,
-        });
-        const payload = await response.json().catch(() => ({}));
-        if (!response.ok) {
-          throw new Error(payload?.detail ?? payload?.message ?? "Connection issue");
+        const payload = await safeFetch<{ status: string; summary: TimelineSummary }>(
+          "/api/build_timeline",
+          { method: "POST", signal: controller.signal },
+        );
+        if (isApiError(payload)) {
+          setError(payload.error);
+          return;
         }
         setSummary((payload.summary as TimelineSummary) ?? payload);
       } catch (err) {

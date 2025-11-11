@@ -2,11 +2,10 @@
 
 import { useState } from "react";
 
+import { isApiError, safeFetch } from "@/lib/apiClient";
 import StageCard from "./components/StageCard";
 import StepProgress from "./components/StepProgress";
 import SummaryCard from "./components/SummaryCard";
-
-const API_BASE = "http://127.0.0.1:8000";
 
 type Stage = {
   id: number;
@@ -49,12 +48,12 @@ export default function ProcessPage() {
     setError(null);
     setSummary(null);
     try {
-      const response = await fetch(`${API_BASE}${endpoint}`, { method: "POST" });
-      const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        throw new Error(payload?.detail ?? payload?.message ?? "Server connection failed");
+      const payload = await safeFetch<Record<string, unknown>>(`${endpoint}`, { method: "POST" });
+      if (isApiError(payload)) {
+        setError(payload.error);
+        return;
       }
-      setSummary(payload.summary ?? payload);
+      setSummary((payload as Record<string, unknown>).summary ?? payload);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Server connection failed");
     } finally {

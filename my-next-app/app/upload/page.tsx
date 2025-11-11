@@ -3,9 +3,8 @@
 import Link from "next/link";
 import { useState } from "react";
 
+import { isApiError, safeFetch } from "@/lib/apiClient";
 import { DATA_SUMMARY_STORAGE_KEY, DetectedDataSummary } from "../setup/types";
-
-const API_URL = "http://127.0.0.1:8000/api/upload_csv";
 
 export default function UploadRestaurantData() {
   const [file, setFile] = useState<File | null>(null);
@@ -22,16 +21,15 @@ export default function UploadRestaurantData() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const response = await fetch(API_URL, {
-        method: "POST",
-        body: formData,
-      });
-      const data = await response.json().catch(() => ({}));
-      if (!response.ok || data.status === "error") {
-        throw new Error(data?.message ?? "Failed to analyze CSV");
+      const payload = await safeFetch<{ status: string; data: DetectedDataSummary; message?: string }>(
+        "/api/upload_csv",
+        { method: "POST", body: formData },
+      );
+      if (isApiError(payload) || payload.status === "error") {
+        throw new Error(isApiError(payload) ? payload.error : payload.message ?? "Failed to analyze CSV");
       }
 
-      const summary = data.data as DetectedDataSummary;
+      const summary = payload.data as DetectedDataSummary;
       setResult(summary);
       if (typeof window !== "undefined") {
         window.localStorage.setItem(DATA_SUMMARY_STORAGE_KEY, JSON.stringify(summary));
