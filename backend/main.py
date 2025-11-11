@@ -190,7 +190,7 @@ app.add_middleware(
 
 @app.get("/")
 async def root():
-    return {"status": "Backend running on Render", "service": "forecast-api"}
+    return {"status": "Backend running on Railway", "service": "forecast-api"}
 
 
 @app.get("/health")
