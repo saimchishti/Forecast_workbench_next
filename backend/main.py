@@ -177,14 +177,30 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="Forecast Workbench API", version="0.3.0", lifespan=lifespan)
+ALLOWED_ORIGINS = ["*"]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=ALLOWED_ORIGINS,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.get("/")
+async def root():
+    return {"status": "Backend running on Render", "service": "forecast-api"}
+
+
+@app.get("/health")
+async def health():
+    return {"ok": True, "service": "forecast-backend"}
+
+
+@app.get("/keepalive")
+async def keepalive():
+    return {"message": "awake"}
 
 
 def resolve_env(env: str) -> Path:

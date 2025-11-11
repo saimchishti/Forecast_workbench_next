@@ -1,6 +1,9 @@
 fastapi
 uvicorn
 pandas
-pyyaml
+numpy
+scikit-learn
 python-multipart
+pydantic
+pyyaml
 holidays
