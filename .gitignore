@@ -1,0 +1,21 @@
+# Node artifacts
+my-next-app/node_modules/
+my-next-app/.next/
+
+# Python caches
+**/__pycache__/
+*.py[cod]
+
+# Envs
+.env
+*.env
+
+# Archives
+*.zip
+*.tar
+*.tar.gz
+
+# Misc
+.DS_Store
+Thumbs.db
+

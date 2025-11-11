@@ -1,0 +1,14 @@
+config_version: '1.0'
+version_tag: draft
+meta:
+  name: Q4 Pricing - India
+  created_by: saimchisti@gmail.com
+  created_at: '2025-11-11T11:46:29.091302Z'
+  notes: ''
+forecast:
+  horizon_days: 14
+  lead_time_days: 2
+  granularity: daily
+  hierarchy: restaurant > city > country
+  country: US
+  promo_calendar_path: data/special_events_calendar.csv

@@ -1,0 +1,13 @@
+config_version: "1.0"
+version_tag: "draft"
+meta:
+  name: "Sample Forecast"
+  created_by: "system"
+  notes: ""
+forecast:
+  horizon_days: 30
+  lead_time_days: 7
+  granularity: "weekly"
+  hierarchy: "Restaurant > City > Country"
+  country: "India"
+  promo_calendar_path: "data/special_events_calendar.csv"

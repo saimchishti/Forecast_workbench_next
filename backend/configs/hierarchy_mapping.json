@@ -1,0 +1,8 @@
+{
+  "restaurant_to_city": {
+    "Restaurant A": "Mumbai"
+  },
+  "city_to_country": {
+    "Mumbai": "India"
+  }
+}
